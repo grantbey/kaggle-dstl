@@ -1,5 +1,9 @@
+submission_resized_array.pickle
 *.tiff
 *.tif
 cookies.txt
 *.zip
 *.tif
+*.hdf5
+x_augmented.npy
+y_augmented.npy
