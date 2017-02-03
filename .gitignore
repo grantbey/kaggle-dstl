@@ -7,3 +7,5 @@ cookies.txt
 *.hdf5
 x_augmented.npy
 y_augmented.npy
+train_imgs.npy
+train_msks.npy
