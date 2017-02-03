@@ -51,7 +51,7 @@ def import_data(class_):
     '''    
     return x, y, y_oneclass
 
-class_ = sys.argv[1]
+class_ = int(sys.argv[1])
 x, y, y_oneclass = import_data(class_)
 
 # Increment the counter
@@ -68,8 +68,103 @@ def set_counter(run):
     np.save('./data/run_counter.npy',run)
     return run
 # Uncomment the next line to manually set the counter if something goes wrong
-run = set_counter(sys.argv[2])
+run = set_counter(int(sys.argv[2]))
 print('This is run # %i' %run)
+
+def compiler(img_rows = x.shape[2],img_cols = x.shape[3],
+            nfilters = 32,activation = 'relu',init = 'he_normal',
+            lr=1.0,decay=0.0,momentum=0.0, nesterov=False,reg=0.01,p=[0.2,0.2,0.2,0.2,0.2,0.2,0.2,0.2,0.2]):
+    
+    def jaccard(y_true, y_pred,smooth=1.):
+        y_true_f = K.flatten(y_true)
+        y_pred_f = K.flatten(y_pred)
+        intersection = K.sum(y_true_f * y_pred_f)
+        return (intersection + smooth) / (K.sum(y_true_f) + K.sum(y_pred_f) - intersection + smooth)
+    
+    def Conv2DReluBatchNorm(n_filter, w_filter, h_filter, inputs, activation, init='he_uniform',dropout=0.2):
+        # Batch norm after activation / leakyrelu
+        #return BatchNormalization(mode=2, axis=1)(LeakyReLU()((Convolution2D(n_filter, w_filter, h_filter, border_mode='same',init=init,W_regularizer=l2(reg),W_constraint = maxnorm(3))(inputs))))
+        
+        # Batch norm before activation
+        #return LeakyReLU()(BatchNormalization(mode=0, axis=1)((Convolution2D(n_filter, w_filter, h_filter, border_mode='same',init=init,W_regularizer=l2(reg),W_constraint = maxnorm(3))(inputs))))
+        
+        # Batch norm after activation / relu
+        return BatchNormalization(mode=2, axis=1)(Activation(activation=activation)((Convolution2D(n_filter, w_filter, h_filter, border_mode='same',init=init,W_regularizer=l2(reg),W_constraint = maxnorm(3))(inputs))))
+        
+    def up_conv(nfilters,filter_factor,inputs,init=init,activation=activation):
+        # No batch norm
+        #return LeakyReLU()(Convolution2D(nfilters*filter_factor, 2, 2, border_mode='same',init=init,W_regularizer=l2(reg),W_constraint = maxnorm(3))(UpSampling2D(size=(2, 2))(inputs)))
+        
+        # Batch norm after activation
+        #return BatchNormalization(mode=2, axis=1)(LeakyReLU()(Convolution2D(nfilters*filter_factor, 2, 2, border_mode='same',init=init,W_regularizer=l2(reg),W_constraint = maxnorm(3))(UpSampling2D(size=(2, 2))(inputs))))
+        
+        # Batch norm after activation / relu
+        return BatchNormalization(mode=2, axis=1)(Activation(activation=activation)(Convolution2D(nfilters*filter_factor, 2, 2, border_mode='same',init=init,W_regularizer=l2(reg),W_constraint = maxnorm(3))(UpSampling2D(size=(2, 2))(inputs))))
+
+    inputs = Input((20, img_rows, img_cols))
+    padded = ZeroPadding2D(padding=(12,12))(inputs)
+    
+    conv1 = Conv2DReluBatchNorm(nfilters, 3, 3, padded, activation=activation,init=init)
+    conv1 = Conv2DReluBatchNorm(nfilters, 3, 3, conv1, activation=activation,init=init)
+    pool1 = MaxPooling2D(pool_size=(2, 2))(conv1)
+    pool1 = Dropout(p=p[0])(pool1)
+
+    conv2 = Conv2DReluBatchNorm(nfilters*2, 3, 3, pool1, activation=activation,init=init)
+    conv2 = Conv2DReluBatchNorm(nfilters*2, 3, 3, conv2, activation=activation,init=init)
+    pool2 = MaxPooling2D(pool_size=(2, 2))(conv2)
+    pool2 = Dropout(p=p[1])(pool2)
+
+    conv3 = Conv2DReluBatchNorm(nfilters*4, 3, 3, pool2, activation=activation,init=init)
+    conv3 = Conv2DReluBatchNorm(nfilters*4, 3, 3, conv3, activation=activation,init=init)
+    pool3 = MaxPooling2D(pool_size=(2, 2))(conv3)
+    pool3 = Dropout(p=p[2])(pool3)
+
+    conv4 = Conv2DReluBatchNorm(nfilters*8, 3, 3, pool3, activation=activation,init=init)
+    conv4 = Conv2DReluBatchNorm(nfilters*8, 3, 3, conv4, activation=activation,init=init)
+    pool4 = MaxPooling2D(pool_size=(2, 2))(conv4)
+    pool4 = Dropout(p=p[3])(pool4)
+
+    conv5 = Conv2DReluBatchNorm(nfilters*16, 3, 3, pool4, activation=activation,init=init)
+    conv5 = Conv2DReluBatchNorm(nfilters*16, 3, 3, conv5, activation=activation,init=init)
+    conv5 = Dropout(p=p[4])(conv5)
+        
+    up6 = merge([up_conv(nfilters,8,conv5), conv4], mode='concat', concat_axis=1)
+    conv6 = Conv2DReluBatchNorm(nfilters*8, 3, 3, up6, activation=activation,init=init)
+    conv6 = Conv2DReluBatchNorm(nfilters*8, 3, 3, conv6, activation=activation,init=init)
+    conv6 = Dropout(p=p[5])(conv6)
+
+    up7 = merge([up_conv(nfilters,4,conv6), conv3], mode='concat', concat_axis=1)
+    conv7 = Conv2DReluBatchNorm(nfilters*4, 3, 3, up7, activation=activation,init=init)
+    conv7 = Conv2DReluBatchNorm(nfilters*4, 3, 3, conv7, activation=activation,init=init)
+    conv7 = Dropout(p=p[6])(conv7)
+
+    up8 = merge([up_conv(nfilters,2,conv7), conv2], mode='concat', concat_axis=1)
+    conv8 = Conv2DReluBatchNorm(nfilters*2, 3, 3, up8, activation=activation,init=init)
+    conv8 = Conv2DReluBatchNorm(nfilters*2, 3, 3, conv8, activation=activation,init=init)
+    conv8 = Dropout(p=p[7])(conv8)
+
+    up9 = merge([up_conv(nfilters,1,conv8), conv1], mode='concat', concat_axis=1)
+    conv9 = Conv2DReluBatchNorm(nfilters, 3, 3, up9, activation=activation,init=init)
+    conv9 = Conv2DReluBatchNorm(nfilters, 3, 3, conv9, activation=activation,init=init)
+    conv9 = Dropout(p=p[8])(conv9)
+    
+    conv10 = Conv2DReluBatchNorm(1, 1, 1, conv9, activation='relu',init=init)
+    cropped = Cropping2D(cropping=((12,12), (12,12)))(conv10)
+    output = Activation(activation='sigmoid')(cropped)
+    
+    model = Model(input=inputs, output=output)
+    
+    model.compile(optimizer=Adam(lr=lr,decay=decay), loss='binary_crossentropy', metrics=[jaccard])
+    
+    return model
+
+p=[0.1,0.2,0.3,0.4,0.5,0.4,0.3,0.2,0.1] # current version
+#p=[0.2,0.3,0.4,0.5,0.5,0.5,0.4,0.3,0.2] # symmetric but more dropout
+#p=[0.2,0.2,0.3,0.3,0.4,0.4,0.5,0.5,0.6] # increasing
+
+model = compiler(img_rows=x.shape[2],img_cols=x.shape[3],
+            nfilters=16,activation='relu',init='he_normal',
+            lr=0.001,decay=0,momentum=0,reg=0,p=p)
 
 def trainer(model,fit=True,use_existing=False):
     print('This is run # %i' %run)
@@ -99,5 +194,5 @@ def trainer(model,fit=True,use_existing=False):
 
 model = trainer(model,fit=True,use_existing=False)
 model.save('u-net-complete-model-run_{}_class_{}.h5'.format(run,class_))
-push('Training is done on class %i' %class_,
+push('Training is done',
      'Train loss: %f, train jaccard: %f, val loss %f, val jaccard%f' %(model.history.history['loss'][-1],model.history.history['jaccard'][-1],model.history.history['val_loss'][-1],model.history.history['val_jaccard'][-1]))
