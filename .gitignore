@@ -1,4 +1,6 @@
 submission_resized_array.pickle
+data/submission_images_processed.npy
+data/submission_images.npy
 *.tiff
 *.tif
 cookies.txt
