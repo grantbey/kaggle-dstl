@@ -6,7 +6,7 @@ data/submission_images.npy
 cookies.txt
 *.zip
 *.tif
-*.hdf5
+unet.hdf5
 x_augmented.npy
 y_augmented.npy
 train_imgs.npy
