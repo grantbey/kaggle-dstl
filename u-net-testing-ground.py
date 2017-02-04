@@ -1,8 +1,7 @@
-
 # coding: utf-8
 
 # ##### U-Net architecture
-# 
+#
 # See [here](https://github.com/jocicmarko/ultrasound-nerve-segmentation/blob/master/train.py#L19) for code and [here](https://arxiv.org/pdf/1505.04597.pdf) for the original literature.
 
 import numpy as np
@@ -30,7 +29,7 @@ import sys
 # Pushbullet notifier
 def push(title='Done!',text=''):
     Pushbullet('o.YFPNNPfGRekivaCGHa4qMSgjZt8zJ6FL').devices[0].push_note(title,text)
-    
+
 # Import the training data
 def import_data(class_):
     x = np.load('./data/x_augmented.npy','r')
@@ -39,16 +38,16 @@ def import_data(class_):
     '''
     Classes:
     0 Buildings - large building, residential, non-residential, fuel storage facility, fortified building
-    1 Misc. Manmade structures 
-    2 Road 
+    1 Misc. Manmade structures
+    2 Road
     3 Track - poor/dirt/cart track, footpath/trail
     4 Trees - woodland, hedgerows, groups of trees, standalone trees
     5 Crops - contour ploughing/cropland, grain (wheat) crops, row (potatoes, turnips) crops
-    6 Waterway 
+    6 Waterway
     7 Standing water
     8 Vehicle Large - large vehicle (e.g. lorry, truck,bus), logistics vehicle
     9 Vehicle Small - small vehicle (car, van), motorbike
-    '''    
+    '''
     return x, y, y_oneclass
 
 class_ = int(sys.argv[1])
@@ -74,36 +73,36 @@ print('This is run # %i' %run)
 def compiler(img_rows = x.shape[2],img_cols = x.shape[3],
             nfilters = 32,activation = 'relu',init = 'he_normal',
             lr=1.0,decay=0.0,momentum=0.0, nesterov=False,reg=0.01,p=[0.2,0.2,0.2,0.2,0.2,0.2,0.2,0.2,0.2]):
-    
+
     def jaccard(y_true, y_pred,smooth=1.):
         y_true_f = K.flatten(y_true)
         y_pred_f = K.flatten(y_pred)
         intersection = K.sum(y_true_f * y_pred_f)
         return (intersection + smooth) / (K.sum(y_true_f) + K.sum(y_pred_f) - intersection + smooth)
-    
+
     def Conv2DReluBatchNorm(n_filter, w_filter, h_filter, inputs, activation, init='he_uniform',dropout=0.2):
         # Batch norm after activation / leakyrelu
         #return BatchNormalization(mode=2, axis=1)(LeakyReLU()((Convolution2D(n_filter, w_filter, h_filter, border_mode='same',init=init,W_regularizer=l2(reg),W_constraint = maxnorm(3))(inputs))))
-        
+
         # Batch norm before activation
         #return LeakyReLU()(BatchNormalization(mode=0, axis=1)((Convolution2D(n_filter, w_filter, h_filter, border_mode='same',init=init,W_regularizer=l2(reg),W_constraint = maxnorm(3))(inputs))))
-        
+
         # Batch norm after activation / relu
         return BatchNormalization(mode=2, axis=1)(Activation(activation=activation)((Convolution2D(n_filter, w_filter, h_filter, border_mode='same',init=init,W_regularizer=l2(reg),W_constraint = maxnorm(3))(inputs))))
-        
+
     def up_conv(nfilters,filter_factor,inputs,init=init,activation=activation):
         # No batch norm
         #return LeakyReLU()(Convolution2D(nfilters*filter_factor, 2, 2, border_mode='same',init=init,W_regularizer=l2(reg),W_constraint = maxnorm(3))(UpSampling2D(size=(2, 2))(inputs)))
-        
+
         # Batch norm after activation
         #return BatchNormalization(mode=2, axis=1)(LeakyReLU()(Convolution2D(nfilters*filter_factor, 2, 2, border_mode='same',init=init,W_regularizer=l2(reg),W_constraint = maxnorm(3))(UpSampling2D(size=(2, 2))(inputs))))
-        
+
         # Batch norm after activation / relu
         return BatchNormalization(mode=2, axis=1)(Activation(activation=activation)(Convolution2D(nfilters*filter_factor, 2, 2, border_mode='same',init=init,W_regularizer=l2(reg),W_constraint = maxnorm(3))(UpSampling2D(size=(2, 2))(inputs))))
 
     inputs = Input((20, img_rows, img_cols))
     padded = ZeroPadding2D(padding=(12,12))(inputs)
-    
+
     conv1 = Conv2DReluBatchNorm(nfilters, 3, 3, padded, activation=activation,init=init)
     conv1 = Conv2DReluBatchNorm(nfilters, 3, 3, conv1, activation=activation,init=init)
     pool1 = MaxPooling2D(pool_size=(2, 2))(conv1)
@@ -127,7 +126,7 @@ def compiler(img_rows = x.shape[2],img_cols = x.shape[3],
     conv5 = Conv2DReluBatchNorm(nfilters*16, 3, 3, pool4, activation=activation,init=init)
     conv5 = Conv2DReluBatchNorm(nfilters*16, 3, 3, conv5, activation=activation,init=init)
     conv5 = Dropout(p=p[4])(conv5)
-        
+
     up6 = merge([up_conv(nfilters,8,conv5), conv4], mode='concat', concat_axis=1)
     conv6 = Conv2DReluBatchNorm(nfilters*8, 3, 3, up6, activation=activation,init=init)
     conv6 = Conv2DReluBatchNorm(nfilters*8, 3, 3, conv6, activation=activation,init=init)
@@ -147,15 +146,15 @@ def compiler(img_rows = x.shape[2],img_cols = x.shape[3],
     conv9 = Conv2DReluBatchNorm(nfilters, 3, 3, up9, activation=activation,init=init)
     conv9 = Conv2DReluBatchNorm(nfilters, 3, 3, conv9, activation=activation,init=init)
     conv9 = Dropout(p=p[8])(conv9)
-    
+
     conv10 = Conv2DReluBatchNorm(1, 1, 1, conv9, activation='relu',init=init)
     cropped = Cropping2D(cropping=((12,12), (12,12)))(conv10)
     output = Activation(activation='sigmoid')(cropped)
-    
+
     model = Model(input=inputs, output=output)
-    
+
     model.compile(optimizer=Adam(lr=lr,decay=decay), loss='binary_crossentropy', metrics=[jaccard])
-    
+
     return model
 
 p=[0.1,0.2,0.3,0.4,0.5,0.4,0.3,0.2,0.1] # current version
@@ -168,10 +167,10 @@ model = compiler(img_rows=x.shape[2],img_cols=x.shape[3],
 
 def trainer(model,fit=True,use_existing=False):
     print('This is run # %i' %run)
-    
+
     if use_existing:
-        model.load_weights('./data/model_weights_class_{}_run_{}.hdf5'.format(_class,run))
-        
+        model.load_weights('./data/model_weights_class_{}_run_{}.hdf5'.format(class_,run))
+
     if fit:
         quitter = EarlyStopping(monitor='loss', min_delta=0.001, patience=100, verbose=1, mode='auto')
         lrreducer = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=10, verbose=1, mode='auto', epsilon=0.001, cooldown=2, min_lr=0)
@@ -180,18 +179,20 @@ def trainer(model,fit=True,use_existing=False):
 
         model.fit(x, y_oneclass,
                   batch_size=20,
-                  nb_epoch=1000,
+                  nb_epoch=int(sys.argv[3]),
                   verbose=1,
                   shuffle=True,
                   callbacks=[model_checkpoint,csvlogger],
                   validation_split=0.2,
-                  initial_epoch=0)
-            
+                  initial_epoch=int(sys.argv[4]))
+
     preds = model.predict(x, verbose=1)
     np.save('preds.npy', preds)
-    
-    return model
 
+    return model
+use_existing = bool(sys.argv[5])
+#print(use_existing)
+#print(sys.argv[5])
 model = trainer(model,fit=True,use_existing=False)
 model.save('u-net-complete-model-run_{}_class_{}.h5'.format(run,class_))
 push('Training is done',
