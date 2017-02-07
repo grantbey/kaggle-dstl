@@ -4,11 +4,6 @@ cookies.txt
 *.zip
 *.tif
 *.hdf5
-
-#data/submission-data/submission_images_136x136_processed.npy
-#data/submission-data/submission_images_136x136.npy
-#data/submission-data/submission_images_160x160_processed.npy
-#data/submission-data/submission_images_160x160.npy
 data/training-data/*
 data/submission-data/*
 
